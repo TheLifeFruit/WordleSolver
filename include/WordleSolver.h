@@ -18,7 +18,7 @@ public:
   std::array<int, 26> maxLetters;
   std::array<int, 26> oldPresentLetters = {};
   std::unique_ptr<FeedbackStrategy> m_feedbackStrategy;
-  void updateTries(int gameTries);
+  void updateFeedback(const std::vector<Feedback>& feedback);
   explicit WordleSolver(std::unique_ptr<WordleGame> m_game);
   std::string nextGuess();
   bool matchesFeedback(const std::string& word,
@@ -44,6 +44,7 @@ public:
   double calculateEntropy(const std::string& guess, const std::vector<std::string>& possibleWords) const;
 
 private:
+  std::vector<Feedback> getStoredFeedback(int attempt) const;
   static std::string feedbackToString(const std::vector<Feedback>& feedback);
   void printGuessingInfo() const;
   static void printEntropyResults(

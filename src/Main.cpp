@@ -22,7 +22,7 @@ static std::string feedbackToString(const std::vector<Feedback>& feedback) {
 
 int main() {
   double average = 0.0;
-  int runs = 1000;
+  int runs = 4000;
   int fails = 0;
   std::array<int, 6> tries = {0, 0, 0, 0, 0, 0};
   for (int g=0; g < runs; g++) {
@@ -32,65 +32,64 @@ int main() {
       std::unique_ptr<WordleGame> game = std::make_unique<WordleGame>("../data/word-bank.csv");
       int maxTries = game->getMaxTries();
       std::string secret = game->getSecret();
-      // std::cout << "[DEBUG] Secret word is: " <<secret << std::endl;
       const auto solver = std::make_unique<WordleSolver>(std::move(game));
 
+      // std::cout << "[DEBUG] Secret word is: " <<secret << std::endl;
       std::cout << "[INFO] Start Wordle-Solver..." << std::endl;
+
       for (int i = 0; i < maxTries; ++i) {
-        std::string guess;
-          if (i == 0) {
-            // precomputed: https://www.youtube.com/watch?v=fRed0Xmc2Wg
-            // Check out README.txt for more info
-            guess = "slate";
+        std::string guess = solver->nextGuess();
+        std::cout << "Attempt " + std::to_string(i + 1) + ": " + guess << std::endl;
+
+        std::vector<Feedback> feedback;
+        try {
+            feedback = solver->feedbackPattern(guess, secret);
+        } catch (const std::invalid_argument& e) {
+            std::cout << "Invalid Argument - Abort!" + std::string(e.what()) << std::endl;
+            break;
+        } catch (const std::exception& e) {
+            std::cout << "Exception - Abort! " + std::string(e.what()) << std::endl;
+            break;
+        }
+        // std::cout << "Feedback: " << feedbackToString(feedback) << '\n';
+        solver->updateFeedback(feedback);
+
+        // Update wrong letters:
+        solver->addAbsentLetters(guess, feedback);
+        solver->updateMaxLetters(guess, feedback);
+
+
+        std::string fb;
+        for (auto f : feedback) {
+            if (f == Feedback::Correct) fb += "=";
+            else if (f == Feedback::Present) fb += "-";
+            else if (f == Feedback::Absent) fb += ".";
+            else fb += "?";
+        }
+        std::cout << "Feedback:  " + fb << std::endl;
+
+        // Game Flags: Win/Loss
+        if (std::all_of(feedback.begin(), feedback.end(), [](Feedback f) { return f == Feedback::Correct; })) {
+          if (i+1 != 0) {
+            std::cout << "[INFO] Won in " + std::to_string(i + 1) + " attempts! The solution was: " + secret << std::endl;
           } else {
-            guess = solver->nextGuess();
+            std::cout << "[INFO] Won in 1 attempt! The solution was: " + secret << std::endl;
           }
 
-          std::vector<Feedback> feedback;
-          std::cout << "Attempt " + std::to_string(i + 1) + ": " + guess << std::endl;
-          solver->updateTries(i);
+          average += i + 1;
+          tries[i]++;
+          break;
+        }
 
-          try {
-              feedback = solver->feedbackPattern(guess, secret);
-          } catch (const std::invalid_argument& e) {
-              std::cout << "Invalid Argument - Abort!" + std::string(e.what()) << std::endl;
-              break;
-          } catch (const std::exception& e) {
-              std::cout << "Exception - Abort! " + std::string(e.what()) << std::endl;
-              break;
-          }
+        if (i == maxTries - 1 || guess.empty()) {
+          std:: cout << "[INFO] You lost the game! The solution was: " + secret << std::endl;
+          average += 7;
+          fails++;
+          break;
+        }
 
-          // Update wrong letters:
-          solver->addAbsentLetters(guess, feedback);
-          solver->updateMaxLetters(guess, feedback);
-
-
-          std::string fb;
-          for (auto f : feedback) {
-              if (f == Feedback::Correct) fb += "=";
-              else if (f == Feedback::Present) fb += "-";
-              else if (f == Feedback::Absent) fb += ".";
-              else fb += "?";
-          }
-          std::cout << "Feedback:  " + fb << std::endl;
-          if (std::all_of(feedback.begin(), feedback.end(), [](Feedback f) { return f == Feedback::Correct; })) {
-            if (i+1 != 0) {
-              std::cout << "[INFO] Won in " + std::to_string(i + 1) + " attempts! The solution was: " + secret << std::endl;
-            } else {
-              std::cout << "[INFO] Won in 1 attempt! The solution was: " + secret << std::endl;
-            }
-
-            average += i + 1;
-            tries[i]++;
-            break;
-          }
-          solver->updatePossibleWords(guess, feedback);
-          if (i == maxTries - 1 || guess.empty()) {
-            std:: cout << "[INFO] You lost the game! The solution was: " + secret << std::endl;
-            average += 7;
-            fails++;
-            break;
-          }
+        // only update AFTER the game has checked if the loops is done
+        solver->updatePossibleWords(guess, feedback);
 
       }
     } catch (const std::exception& e) {

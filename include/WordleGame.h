@@ -20,7 +20,7 @@ public:
     explicit WordleGame(const std::string& wordListFile);
     std::vector<Feedback> guess(const std::string& word);
     static bool isWon(const std::vector<Feedback>& feedback) ;
-    [[nodiscard]] int getTries() const;
+    [[nodiscard]] int getTries() const; // why do you insist on calling Feedback strategy ???? I seriously do NOT get it. This will never result in 0 if guess isn't called in main. Am I supposed to change that architecture?
     [[nodiscard]] int getMaxTries() const;
     [[nodiscard]] int getWordLength() const;
     [[nodiscard]] const std::string& getSecret() const { return secret; }
