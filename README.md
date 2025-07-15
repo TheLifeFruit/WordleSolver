@@ -3,7 +3,7 @@
 I have tested the best entry words as it allows for experimantation whit added performance gains:
 Lowest avg orderd: salet, slate, trace, crate, raise
 While salet is the best starting word I tested I do not use salet as it is not in the word-bank
-'''
+--------------------------------------------------------------------------------------------------------
 salet:
 [INFO] Games: 4000
 [INFO] Game Average Tries: 3.49725
@@ -52,7 +52,7 @@ aeiou:
 [INFO] Game Fails: 13
 [INFO] 1-Tries: 0, 2-Tries: 111, 3-Tries: 1404, 4-Tries: 1698, 5-Tries: 674, 6-Tries: 100
 [INFO] 1-Tries: 0%, 2-Tries: 2.775%, 3-Tries: 35.1%, 4-Tries: 42.45%, 5-Tries: 16.85%, 6-Tries: 2.5%
-'''
+--------------------------------------------------------------------------------------------------------
 
 [SOLVER]
 > METHODS
