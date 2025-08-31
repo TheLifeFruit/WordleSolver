@@ -1,4 +1,0 @@
-C:/Users/Schüler/OneDrive/Code GIT/praktikuminfauto25wordlepart2-gruppe105/cmake-build-debug/CMakeFiles/assignment.dir
-C:/Users/Schüler/OneDrive/Code GIT/praktikuminfauto25wordlepart2-gruppe105/cmake-build-debug/CMakeFiles/assignment_main.dir
-C:/Users/Schüler/OneDrive/Code GIT/praktikuminfauto25wordlepart2-gruppe105/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/Users/Schüler/OneDrive/Code GIT/praktikuminfauto25wordlepart2-gruppe105/cmake-build-debug/CMakeFiles/rebuild_cache.dir

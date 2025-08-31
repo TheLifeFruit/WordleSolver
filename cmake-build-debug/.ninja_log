@@ -1,7 +1,0 @@
-# ninja log v6
-7	2339	7742265595802559	CMakeFiles/assignment.dir/src/WordleGame.cpp.obj	a5a8b4e00e4d79be
-2342	3501	7742265619149865	CMakeFiles/assignment.dir/src/FeedbackStrategy.cpp.obj	a299df993b7cb744
-12	3822	7742265595855897	CMakeFiles/assignment.dir/src/WordleSolver.cpp.obj	152bf06643874c5a
-3822	4668	7742265633953824	libassignment.a	3cd03cb91f2d1083
-3501	5491	7742265630738911	CMakeFiles/assignment_main.dir/src/Main.cpp.obj	aa6b24f54714e027
-5492	6051	7742265650648957	assignment_main.exe	c06a39fd606e943d
