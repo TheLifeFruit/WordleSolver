@@ -1,3 +1,5 @@
+!Fixed Path inside Main! Too lazy to do it correctly
+
 [GUESSES]
 > START
 I have tested the best entry words as it allows for experimantation whit added performance gains:
