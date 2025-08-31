@@ -10,6 +10,8 @@
 #include <random>
 #include <memory>
 
+
+
 static std::string feedbackToString(const std::vector<Feedback>& feedback) {
   std::string s;
   for (auto f : feedback) {
@@ -20,26 +22,53 @@ static std::string feedbackToString(const std::vector<Feedback>& feedback) {
   return s;
 }
 
+static std::vector<Feedback> StringToFeedback(std::string fdbkString) {
+  std::vector<Feedback> fdbk;
+  for (const auto fdbk_char : fdbkString) {
+    if (fdbk_char == '2')  {
+      fdbk.push_back(Feedback::Correct);
+    }else if (fdbk_char == '1')  {
+      fdbk.push_back(Feedback::Present);
+    } else {
+      fdbk.push_back(Feedback::Absent);
+    }
+  }
+
+  return fdbk;
+}
+
+
+
 int main() {
+  int mode = 0;
+  std::cout << "[INFO] Welcome to the Wordle Solver!" << '\n';
+  std::cout << "[INFO] Input mode" << '\n';
+  std::cout << "[INFO] 0: Solution Simultaion" << '\n';
+  std::cout << "[INFO] 1: NextGuess Helper" << '\n';
+  std::cin >> mode;
+  std::cout << "[INFO] Start Wordle-Solver..." << std::endl;
+
   double average = 0.0;
   int runs = 4000;
   int fails = 0;
   std::array<int, 6> tries = {0, 0, 0, 0, 0, 0};
+
+
+
+  if (mode == 0){
   for (int g=0; g < runs; g++) {
     try {
       auto feedbackStrategy = std::make_unique<FeedbackStrategy>();
-
-      std::unique_ptr<WordleGame> game = std::make_unique<WordleGame>("../data/word-bank.csv");
+      std::unique_ptr<WordleGame> game = std::make_unique<WordleGame>("C:/Code GIT/praktikuminfauto25wordlepart2-gruppe105/data/word-bank.csv");
       int maxTries = game->getMaxTries();
       std::string secret = game->getSecret();
       const auto solver = std::make_unique<WordleSolver>(std::move(game));
 
       // std::cout << "[DEBUG] Secret word is: " <<secret << std::endl;
-      std::cout << "[INFO] Start Wordle-Solver..." << std::endl;
 
       for (int i = 0; i < maxTries; ++i) {
         std::string guess = solver->nextGuess();
-        std::cout << "Attempt " + std::to_string(i + 1) + ": " + guess << std::endl;
+        std::cout << "Attempt " + std::to_string(i + 1) + ": " + guess << '\n';
 
         std::vector<Feedback> feedback;
         try {
@@ -105,5 +134,47 @@ int main() {
   std::cout << "[INFO] 1-Tries: " << tries[0] << ", 2-Tries: " << tries[1] << ", 3-Tries: " << tries[2] << ", 4-Tries: " << tries[3] << ", 5-Tries: " << tries[4] << ", 6-Tries: " << tries[5] << std::endl;
   std::cout << "[INFO] 1-Tries: " << (static_cast<double> (tries[0])/runs) *100 << "%, 2-Tries: " << static_cast<double>(tries[1])/runs*100 << "%, 3-Tries: " << static_cast<double>(tries[2])/runs*100 << "%, 4-Tries: " << static_cast<double>(tries[3])/runs*100 << "%, 5-Tries: " << static_cast<double>(tries[4])/runs*100 << "%, 6-Tries: " << static_cast<double>(tries[5])/runs*100 << "%" << std::endl;
 
+  }else {
+    int i = 0;
+
+    auto feedbackStrategy = std::make_unique<FeedbackStrategy>();
+    std::unique_ptr<WordleGame> game = std::make_unique<WordleGame>("C:/Code GIT/praktikuminfauto25wordlepart2-gruppe105/data/word-bank.csv");
+    const auto solver = std::make_unique<WordleSolver>(std::move(game));
+
+    while (true){
+    try {
+
+      std::string guess = solver->nextGuess();
+      std::cout << "Try: " + std::to_string(i + 1) + ": " + guess << '\n';
+      std::cout << "[0: false] [1:correct Letter] [2: correct] , example would be: 00201 and end to finish" << '\n';
+      std::string fdbkString;
+      std::cout << "Input Feedback: " << '\n';
+      std::cin >> fdbkString;
+
+      if (fdbkString == "22222" || fdbkString.length() != 5) {
+        return 0;
+      }
+
+      std::vector<Feedback> feedback = StringToFeedback(fdbkString);
+      solver->updateFeedback(feedback);
+
+      // Update wrong letters:
+      solver->addAbsentLetters(guess, feedback);
+      solver->updateMaxLetters(guess, feedback);
+
+      // only update AFTER the game has checked if the loops is done
+      solver->updatePossibleWords(guess, feedback);
+
+
+      ++i;
+
+    } catch (const std::exception& e) {
+      std::cerr << "[FATAL] " << e.what() << std::endl;
+      return 2;
+    }
+  }
+
+
+  }
   return 0;
 }

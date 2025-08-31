@@ -52,7 +52,7 @@ void WordleSolver::updateFeedback(const std::vector<Feedback>& feedback) {
  * @return The expected entropy value.
  */
 double WordleSolver::calculateEntropy(const std::string& guess, const std::vector<std::string>& possibleWords) const {
-  // Should never heppen without getting flagged before
+  // Should never happen without getting flagged before
   if (possibleWords.empty()) return 0.0;
 
   double entropy = 0;
@@ -60,7 +60,6 @@ double WordleSolver::calculateEntropy(const std::string& guess, const std::vecto
   std::unordered_map<std::string, std::size_t> patternCount;
 
   for (const auto &word : possibleWords) {
-
     std::string pat = feedbackToString(feedbackPattern(guess, word));
     ++patternCount[pat];
   }
@@ -68,8 +67,8 @@ double WordleSolver::calculateEntropy(const std::string& guess, const std::vecto
   // 2:
   for (const auto& [pat, count] : patternCount)
   {
-    double p = count / total;               // probability of this pattern
-    entropy -= p * std::log2(p);            // accumulate −p·log₂p
+    double p = count / total;
+    entropy -= p * std::log2(p);
   }
 
   return entropy;
@@ -232,7 +231,6 @@ int WordleSolver::scoreProbe3Word(const std::string& word, const std::array<int,
 int WordleSolver::scoreProbe4Word(const std::string& word, const std::array<int, 26>& probeChars) {
   std::array<int,26> used{};
   std::string fdbk = feedbackToString(getStoredFeedback(tries -1));
-
 
   for (const char &ch : word) {
     ++used[std::tolower(ch) - 'a'];
