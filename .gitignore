@@ -1,0 +1,12 @@
+# 1. Ignore everything in the root
+/*
+
+# 2. Allow specific files in the root
+!/.gitignore
+!/CMakeLists.txt
+!/.clang-format
+
+# 3. Allow folders (and everything inside them)
+!/src/
+!/include/
+!/data/
