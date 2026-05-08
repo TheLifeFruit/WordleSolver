@@ -1,46 +1,87 @@
 #include "../include/WordleSolver.h"
 #include <algorithm>
-#include <cmath>
+
 #include <iostream>
-// #include <limits>
-#include <sstream>
+
 #include <stdexcept>
 #include <unordered_map>
 #include <array>
+#include <random>
+#include <fstream>
 
-#include "WordleGame.h"
+#include "WordleExceptions.h"
 #include "FeedbackStrategy.h"
 
-WordleSolver::WordleSolver(std::unique_ptr<WordleGame> m_game) {
-    if (m_game->wordList.empty()) {
-        throw WordListEmptyException();
-    }
-    m_feedbackStrategy = std::make_unique<FeedbackStrategy>();
-    allWords = m_game->wordList;
-    for (auto& word : allWords) {
-      std::transform(word.begin(), word.end(), word.begin(), ::tolower);
-    }
-    possibleWords = allWords;
-    game = std::move(m_game);
-    // -1: no information, maxLetters[2] == 2 -> letter c can not have more then 2 letters
-    maxLetters.fill(-1);
+static const std::array<std::array<std::string, 5>, 21> startingGuesses = {{
+  {{ "", "", "", "", "" }}, // 0
+  {{ "", "", "", "", "" }}, // 1
+  {{ "", "", "", "", "" }}, // 2
+  {{ "", "", "", "", "" }}, // 3
+  {{ "aloe",  "tear",  "rate",  "sale",  "roam"  }}, // 4
+  {{ "salet", "crane", "slate", "trace", "raise" }}, // 5
+  {{ "radios", "senior", "altern", "retail", "orient" }}, // 6
+  {{ "toadies", "staring", "relates", "retails", "oration" }}, // 7
+  {{ "calories", "relation", "creation", "reaction", "tailored" }}, // 8
+  {{ "relations", "striation", "alternate", "retailers", "assertion" }}, // 9
+  {{ "cigarettes", "alternates", "restrained", "trailblaze", "threadings" }}, // 10
+  {{ "clandestine", "orientation", "alternation", "stereotyped", "neutralized" }}, // 11
+  {{ "relationship", "derelictions", "constructions", "intermediate", "organized" }}, // 12
+  {{ "congratulates", "consideration", "determination", "revolutionary", "international" }}, // 13
+  {{ "congratulatory", "identification", "representation", "administration", "rehabilitation" }}, // 14
+  {{ "bacteriologists", "synchronization", "standardization", "proportionality", "professionalism" }}, // 15
+  {{ "interpenetration", "responsibilities", "characterization", "overintellectual", "sentimentalizing" }}, // 16
+  {{ "comprehensibility", "institutionalized", "misinterpretation", "telecommunication", "overenthusiastic" }}, // 17
+  {{ "anticonstitutional", "incomprehensible", "characteristically", "compartmentalizing", "institutionalizing" }}, // 18
+  {{ "chlorofluorocarbons", "unconstitutionality", "hypercharacteristic", "interchangeability", "disproportionality" }}, // 19
+  {{ "buckminsterfullerene", "comprehensibilities", "institutionalization", "counterrevolutionary", "uncharacteristically" }}  // 20
+}};
+
+
+
+WordleSolver::WordleSolver(const std::string& wordListFile) {
+  wordList = readWordList(wordListFile);
+
+  if (wordList.empty()) {
+    throw WordListEmptyException();
+  }
+
+  secret = chooseRandomSecret(wordList);
+  tries = 0;
+
+  for (auto& word : wordList) {
+    std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+  }
+  possibleWords = wordList;
+
+  // -1: no information, maxLetters[2] == 2 -> letter c can not have more then 2 letters
+  maxLetters.fill(-1);
 }
+
+
+
+
+
+
 
 std::vector<Feedback> WordleSolver::getStoredFeedback(int attempt) const {
-  if (attempt < 0 || attempt >= storedFeedback.size()) {
+  if (attempt < 0 || attempt >= storedAttempts.size()) {
     throw std::out_of_range("[ERROR] Invalid attempt number when accessing storedFeedback!");
   }
-  return storedFeedback[attempt];
+  return storedAttempts[attempt].second;;
 }
 
+
+
+
 /**
- * @brief pushes the feedback
+ * @brief pushes the attempt and feedback
  * @param feedback
  */
-void WordleSolver::updateFeedback(const std::vector<Feedback>& feedback) {
-  storedFeedback.push_back(feedback);
-  //std::cout << "[DEBUG] Tries inside: " << tries << ", Feedback("<< tries <<"): " << feedbackToString(storedFeedback[tries]) << '\n';
+void WordleSolver::storeAttempt(const std::string& attempt , const std::vector<Feedback>& feedback) {
+  storedAttempts.push_back({attempt, feedback});
+  tries++;
 }
+
 
 
 /**
@@ -52,7 +93,7 @@ void WordleSolver::updateFeedback(const std::vector<Feedback>& feedback) {
  * @return The expected entropy value.
  */
 double WordleSolver::calculateEntropy(const std::string& guess, const std::vector<std::string>& possibleWords) const {
-  // Should never heppen without getting flagged before
+  // Should never happen without getting flagged before
   if (possibleWords.empty()) return 0.0;
 
   double entropy = 0;
@@ -60,7 +101,6 @@ double WordleSolver::calculateEntropy(const std::string& guess, const std::vecto
   std::unordered_map<std::string, std::size_t> patternCount;
 
   for (const auto &word : possibleWords) {
-
     std::string pat = feedbackToString(feedbackPattern(guess, word));
     ++patternCount[pat];
   }
@@ -68,8 +108,8 @@ double WordleSolver::calculateEntropy(const std::string& guess, const std::vecto
   // 2:
   for (const auto& [pat, count] : patternCount)
   {
-    double p = count / total;               // probability of this pattern
-    entropy -= p * std::log2(p);            // accumulate −p·log₂p
+    double p = count / total;
+    entropy -= p * std::log2(p);
   }
 
   return entropy;
@@ -85,7 +125,7 @@ std::array<int, 26> WordleSolver::getLetterFrequency(const std::string& word, co
   std::array<int, 26> letterFrequency;
   letterFrequency.fill(0);
 
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < word.length(); ++i) {
     char g = std::tolower(word[i]);
     if (feedback[i] == fdbk) {
       if (g >= 'a' && g <= 'z') {
@@ -112,23 +152,28 @@ std::string WordleSolver::nextGuess() {
   // std::cout << "[DEBUG] Remaining possible Words: " << possibleWords.size() << std::endl;
   // std::cout << "[DEBUG] Tries: " << tries << '\n' ;
 
-  if(game->getTries() >= game->getMaxTries()) {
+  if(tries >= maxTries) {
     // Won't work if WordleGame::guess is never used (currently feedbackStrategy handles guesses)
     throw NoValidGuessesLeftException();
   }
 
+  size_t currentWordLength = possibleWords[0].length();
+
   // precomputed: https://www.youtube.com/watch?v=fRed0Xmc2Wg
   // Check out README.txt for more info
   if (tries == 0) {
-    tries++;
-    return "slate";
+    return startingGuesses[currentWordLength][0];
   }
+
 
   std::string nextGuess;
   std::vector<std::string> topGuesses;
   std::unordered_map<std::string, double> entropyMap;
   double entropy;
   double maxEntropy = -1.0;
+  int CorrectCount = 0;
+  bool repeating = false;
+
 
   for (const std::string& word : possibleWords) {
     entropy = calculateEntropy(word, possibleWords);
@@ -143,10 +188,10 @@ std::string WordleSolver::nextGuess() {
     }
   }
 
-  int CorrectCount = 0;
-  bool repeating = false;
 
-  for (Feedback fbk : getStoredFeedback(tries - 1) ) {
+
+  std::vector<Feedback> lastFeedback = getStoredFeedback(tries - 1);
+  for (Feedback fbk : lastFeedback) {
     if (fbk == Feedback::Correct) {
       CorrectCount++;
     }
@@ -162,7 +207,37 @@ std::string WordleSolver::nextGuess() {
   }
 
 
+  bool shouldProbe = (CorrectCount >= static_cast<int>(currentWordLength) - 1 && possibleWords.size() > 2);
 
+  if (shouldProbe || (repeating && CorrectCount >= static_cast<int>(currentWordLength) - 2)) {
+    std::array<int, 26> probeLetterFrequency{};
+    probeLetterFrequency.fill(0);
+
+    for (const auto& pWord : possibleWords) {
+      std::array<int, 26> tempFreq = getLetterFrequency(pWord, lastFeedback, Feedback::Absent);
+      for (int j = 0; j < 26; j++) {
+        probeLetterFrequency[j] += tempFreq[j];
+      }
+    }
+
+    for (int i = 0; i < 26; ++i) {
+      if (probeLetterFrequency[i] > 1) probeLetterFrequency[i] = 1;
+    }
+
+    ProbeInfo probe = findProbeWord(probeLetterFrequency, CorrectCount);
+
+    int uniqueLettersInPlay = 0;
+    for (int count : probeLetterFrequency) {
+      if (count > 0) uniqueLettersInPlay++;
+    }
+
+    int threshold = (uniqueLettersInPlay > 4) ? 3 : 2;
+    if (probe.coverage >= threshold) {
+      nextGuess = probe.word;
+    }
+  }
+
+ /*
   // CASE 1: 4 Correct slots
   if (CorrectCount == 4 && tries - 1 < 4 && possibleWords.size() > 2 || repeating && CorrectCount == 3 && tries - 1 < 4 && possibleWords.size() > 2) {
 
@@ -190,6 +265,9 @@ std::string WordleSolver::nextGuess() {
     }
   }
 
+  */
+
+
   // Possible Improvements:
   /* Letter frequency top entropy sorting (WIP)
   if (possibleWords.size() <= 20 && possibleWords.size() > 2 && tries < 4 && maxEntropy <= ENTROPY_THRESHOLD) {
@@ -204,22 +282,209 @@ std::string WordleSolver::nextGuess() {
   */
 
 
-  tries++;
   return nextGuess;
 }
+
+
+
+
+
+/**
+ * @brief Determines the next best guess word based on maximum entropy.
+ *
+ * This function evaluates all remaining possible words, calculates the Shannon entropy
+ * for each as a guess, and selects the word with the highest expected information gain.
+ * It prints detailed entropy information for each candidate and returns the best guess.
+ *
+ * @throws NoValidGuessesLeftException if there are no possible words left to guess.
+ * @return The next guess word with the highest entropy, or an empty string if none found.
+ */
+std::vector<std::string> WordleSolver::nextBestGuesses(int amount) {
+  // std::cout << "[DEBUG] Remaining possible Words: " << possibleWords.size() << std::endl;
+  // std::cout << "[DEBUG] Tries: " << tries << '\n' ;
+
+  std::vector<std::string> topGuesses;
+  size_t currentWordLength = possibleWords[0].length();
+
+
+  // precomputed: https://www.youtube.com/watch?v=fRed0Xmc2Wg
+  // Check out README.txt for more info
+  if (tries == 0) {
+    for (int i = 0; i < amount; i++) {
+      topGuesses.push_back(startingGuesses[currentWordLength][i]);
+    }
+    return topGuesses;
+  }
+
+
+  if (possibleWords.size() <= amount) {
+    for (const std::string& word : possibleWords) {
+      topGuesses.push_back(word);
+    }
+    return topGuesses;
+  }
+
+
+  std::unordered_map<std::string, double> entropyMap;
+  std::vector<std::pair<std::string, double>> bestWords;
+  double entropy;
+  double minTopEntropy = -1.0;
+
+
+  for (const std::string& word : possibleWords) {
+    entropy = calculateEntropy(word, possibleWords);
+    entropyMap[word] = entropy;
+  }
+
+
+  for (const auto& [word, entropy] : entropyMap) {
+    if (entropy > minTopEntropy || bestWords.size() < amount) {
+      bestWords.push_back({word, entropy});
+
+      // Sort descending so the smallest value is at the back
+      std::sort(bestWords.begin(), bestWords.end(), [](auto &a, auto &b) {
+              return a.second > b.second;
+      });
+
+      if (bestWords.size() > amount) {
+              bestWords.pop_back();
+      }
+
+      minTopEntropy = bestWords.back().second;
+    }
+  }
+
+  std::sort(bestWords.begin(), bestWords.end(), [](auto &a, auto &b) {
+    return a.second > b.second;
+  });
+
+  for (int i = 0; i < std::min(amount, (int)bestWords.size()); ++i) {
+    topGuesses.push_back(bestWords[i].first);
+  }
+
+
+
+  // CHECK PROBES
+  int CorrectCount = 0;
+  bool repeating = false;
+
+  std::vector<Feedback> lastFeedback = getStoredFeedback(tries - 1);
+  for (Feedback fbk : lastFeedback) {
+    if (fbk == Feedback::Correct) {
+      CorrectCount++;
+    }
+  }
+
+
+  // Checks if Solver gets stuck on same Feedback twice
+  /*
+  if (tries > 1) {
+    if (getStoredFeedback(tries - 2) == getStoredFeedback(tries - 1)) {
+      repeating = true;
+      // std::cout << "[DEBUG] Repeating feedback: " << feedbackToString(storedFeedback[tries]) << '\n';
+    }
+  }
+  */
+
+  bool shouldProbe = (CorrectCount >= static_cast<int>(currentWordLength) - 1 && possibleWords.size() > 2);
+  if (shouldProbe) {
+    std::array<int, 26> probeFreq = getProbeLetterFrequency(lastFeedback);
+    auto probes = findBestProbeWords(probeFreq, CorrectCount, amount);
+
+    // Insert probes at the beginning of the list if they are highly effective
+    for (const auto& p : probes) {
+      // Threshold: Probe is useful if it tests at least 2 unknown letters
+      if (p.second >= 2) {
+        // Avoid duplicates if the probe word was already in topGuesses
+        if (std::find(topGuesses.begin(), topGuesses.end(), p.first) == topGuesses.end()) {
+          topGuesses.insert(topGuesses.begin(), p.first);
+        }
+      }
+    }
+  }
+
+
+  /*
+  if (CorrectCount == 4 && tries - 1 < 4 && possibleWords.size() > 2 || repeating && CorrectCount == 3 && tries - 1 < 4 && possibleWords.size() > 2) {
+
+    std::array<int, 26> probeLetterFrequency{};
+    for (int i = 0; i < possibleWords.size(); i++) {
+      std::array<int, 26> tempFreq = getLetterFrequency(possibleWords[i], getStoredFeedback(tries -1), Feedback::Absent);
+      for (int j = 0; j < 26; j++) {
+        probeLetterFrequency[j] = probeLetterFrequency[j] + tempFreq[j];
+      }
+    }
+    int counter = 0;
+    for (int i = 0; i < 26; ++i) {
+      if (probeLetterFrequency[i] > 1) {
+        probeLetterFrequency[i] = 0;
+      }else {
+        counter++;
+      }
+    }
+    // std::cout << "Unique lettersFrequencies: " << counter <<'\n';
+
+
+    std::vector<std::pair<std::string, int>> probeWords = findBestProbeWords(probeLetterFrequency, CorrectCount, amount);
+
+    for (const auto& [word, count] : probeWords) {
+     if (CorrectCount == 4 && count >= 2 || CorrectCount == 3 && count >= 3) {
+       topGuesses.push_back(word);
+    }
+  }
+
+
+  }
+
+  // Possible Improvements:
+   Letter frequency top entropy sorting (WIP)
+  if (possibleWords.size() <= 20 && possibleWords.size() > 2 && tries < 4 && maxEntropy <= ENTROPY_THRESHOLD) {
+    // std::cout << "[DEBUG] maxEntropy: "<< maxEntropy << '\n';
+    for (const auto& [word, entropy] : entropyMap) {
+      if (entropy  >= maxEntropy-(maxEntropy * 0.80 )) {
+        topGuesses.push_back(word);
+        // std::cout << "[DEBUG] top Word added: "<< word << '\n';
+      }
+    }
+  }
+  */
+
+
+  return topGuesses;
+}
+
+
+
+
+std::array<int, 26> WordleSolver::getProbeLetterFrequency(const std::vector<Feedback>& lastFeedback) {
+  std::array<int, 26> freq;
+  freq.fill(0);
+
+  for (const std::string& word : possibleWords) {
+    // Use your existing logic: only count letters at indices marked 'Absent'
+    std::array<int, 26> temp = getLetterFrequency(word, lastFeedback, Feedback::Absent);
+    for (int i = 0; i < 26; ++i) {
+      // If the letter exists in this candidate at an unknown position, mark it
+      if (temp[i] > 0) freq[i] = 1;
+    }
+  }
+  return freq;
+}
+
+
 
 int WordleSolver::scoreProbe3Word(const std::string& word, const std::array<int, 26>& probeChars){
   std::unordered_set<std::string> patterns;
   std::string fdbk = feedbackToString(getStoredFeedback(tries -1));
 
   for (const std::string& possible_word : possibleWords) {
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < word.length(); ++i) {
       fdbk[i] = (word[i] == possible_word[i]) ? '2' : '0';
     }
 
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < word.length(); ++i) {
       if (fdbk[i] == '0') {
-        for (int j = 0; j < 5; ++j)
+        for (int j = 0; j < word.length(); ++j)
           if (fdbk[j] != '2' && word[i] == possible_word[j])
           { fdbk[i] = '1'; break; }
       }
@@ -233,7 +498,6 @@ int WordleSolver::scoreProbe4Word(const std::string& word, const std::array<int,
   std::array<int,26> used{};
   std::string fdbk = feedbackToString(getStoredFeedback(tries -1));
 
-
   for (const char &ch : word) {
     ++used[std::tolower(ch) - 'a'];
   }
@@ -245,6 +509,39 @@ int WordleSolver::scoreProbe4Word(const std::string& word, const std::array<int,
   // std::cout << "[DEBUG] Score("<< word << "): " << score << '\n';
   return score;
 }
+
+
+int WordleSolver::scoreProbeEntropy(const std::string& word, const std::array<int, 26>& probeChars) {
+	std::unordered_set<std::string> patterns;
+	size_t L = word.length();
+
+	for (const std::string& possible_word : possibleWords) {
+		// Use the already dynamic feedbackPattern logic
+		std::vector<Feedback> pattern = feedbackPattern(word, possible_word);
+		patterns.insert(feedbackToString(pattern));
+	}
+	return static_cast<int>(patterns.size());
+}
+
+int WordleSolver::scoreProbeCoverage(const std::string& word, const std::array<int, 26>& probeChars) {
+	std::array<int, 26> used{};
+	used.fill(0);
+
+	for (const char &ch : word) {
+		int index = std::tolower(static_cast<unsigned char>(ch)) - 'a';
+		if (index >= 0 && index < 26) {
+			++used[index];
+		}
+	}
+
+	int score = 0;
+	for (int i = 0; i < 26; ++i) {
+		// Only count the overlap between the probe word and the letters we need to test
+		score += std::min(used[i], probeChars[i]);
+	}
+	return score;
+}
+
 
 
 /**
@@ -266,12 +563,56 @@ WordleSolver::ProbeInfo WordleSolver::findProbeWord(const std::array<int, 26>& p
     if (cover > bestProbe.coverage) {
       bestProbe.coverage = cover;
       bestProbe.word = w;
-      if (cover == 5) break;
+      if (cover == bestProbe.word.length()) break;
     }
   }
   // std::cout << "[DEBUG] best Probe Score("<< bestProbe.word << "): " << bestProbe.coverage << '\n';
   return bestProbe;
 }
+
+
+
+
+/**
+ * @brief Looks for a probe word with as many uncertain letters as possible
+ *
+ * @return Probe Word
+ */
+std::vector<std::pair<std::string, int>> WordleSolver::findBestProbeWords(const std::array<int, 26>& probeChars, const int& correctAmount, const int& amount) {
+  WordleSolver::ProbeInfo bestProbe;
+  int cover;
+  std::vector<std::pair<std::string, int>> bestProbeWords;
+
+  for (const std::string w : allWords) {
+    if (correctAmount == 3) {
+      cover = scoreProbe3Word(w, probeChars);
+    }else {
+      cover = scoreProbe4Word(w, probeChars);
+    }
+
+    if (cover > bestProbe.coverage || bestProbeWords.size() < amount) {
+      bestProbeWords.push_back({w, cover});
+      std::sort(bestProbeWords.begin(), bestProbeWords.end(), [](auto &a, auto &b) {
+	 return a.second > b.second;
+      });
+
+      if (bestProbeWords.size() > amount) {
+	bestProbeWords.pop_back();
+      }
+
+      bestProbe.coverage = bestProbeWords.front().second;
+      bestProbe.word = bestProbeWords.front().first;
+      if (cover == bestProbe.word.length()) break;
+    }
+  }
+
+
+  // std::cout << "[DEBUG] best Probe Score("<< bestProbe.word << "): " << bestProbe.coverage << '\n';
+  return bestProbeWords;
+}
+
+
+
 
 
 /**
@@ -283,7 +624,7 @@ WordleSolver::ProbeInfo WordleSolver::findProbeWord(const std::array<int, 26>& p
  */
 bool WordleSolver::matchesFeedback(const std::string& word, const std::string& guess, const std::vector<Feedback>& feedback) const {
   // 1) Filters out words which didn't match absent letters and the '=' feedback
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < guess.length(); ++i) {
     if ( (feedback[i] == Feedback::Correct  && word[i] != guess[i])   ||
          (absentLetters.count(word[i]))                              ||
          (feedback[i] == Feedback::Present && word[i] == guess[i]) ) {
@@ -295,7 +636,7 @@ bool WordleSolver::matchesFeedback(const std::string& word, const std::string& g
   for (int i= 0; i < 26; i++) {
     int need = oldPresentLetters[i];
     if (need == 0) continue;
-    for (int j = 0; j < 5; j++) {
+    for (int j = 0; j < guess.length(); j++) {
       if (feedback[j] != Feedback::Correct && std::tolower(word[j]) == ('a' + i)) {
         need--;
       }
@@ -350,10 +691,6 @@ void WordleSolver::updatePossibleWords(const std::string& guess, const std::vect
     throw DifferentLengthOfGuessAndFeedbackException(guess);
   }
 
-  if (feedback.size() != 5) {
-    throw std::runtime_error("Invalid feedback size!");
-  }
-
   // std::cout << "[DEBUG] Stored feedback size: " << storedFeedback.size() << '\n';
 
   // Generate letterFrequency based on the old guess:
@@ -379,6 +716,10 @@ void WordleSolver::updatePossibleWords(const std::string& guess, const std::vect
 }
 
 
+std::vector<std::string> WordleSolver::getPossibleWords() {
+      return possibleWords;
+  }
+
 /**
  * @brief Adds letters to the absentLetters set based on the guess and feedback.
  *        Letters are added only if they are marked as Absent and not present elsewhere as Correct or Present.
@@ -390,16 +731,16 @@ void WordleSolver::addAbsentLetters(const std::string& guess, const std::vector<
   //std::cout << "[DEBUG] Updating absent letters..." << std::endl;
   // std::cout << "[DEBUG] Feedback: " << feedbackToString(feedback) << '\n';
 
-  if (feedback.size() != 5) {
-    throw std::runtime_error("Invalid feedback size!");
+  if (feedback.size() != guess.length()) {
+    throw std::runtime_error("Invalid feedback/guess length!");
   }
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < guess.length(); i++) {
     // could call WordleSolver::feedbackToString but who cares?
     if (feedback[i] == Feedback::Absent) {
       char c = std::tolower(guess[i]);
       bool seen_elsewhere = false;
-      for (int j = 0; j < 5; ++j) {
+      for (int j = 0; j < guess.length(); ++j) {
         if (j != i && std::tolower(guess[j]) == c && (feedback[j] == Feedback::Correct || feedback[j] == Feedback::Present)) {
           seen_elsewhere = true;
           break;
@@ -420,10 +761,10 @@ void WordleSolver::addAbsentLetters(const std::string& guess, const std::vector<
 // Improved functionality of addAbsentLetters, because simply showing the if a letter is 100% missing or dont know is bad
 void WordleSolver::updateMaxLetters(const std::string& guess, const std::vector<Feedback>& feedback) {
   std::string tempWord = guess;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < guess.length(); i++) {
     if (feedback[i] != Feedback::Absent) continue;
     int count = 0;
-    for (int j = 0; j < 5; j++) {
+    for (int j = 0; j < guess.length(); j++) {
       if (tempWord[j] != guess[i]) continue;
       if (feedback[j] == Feedback::Absent) {
         tempWord[j] = '_';
@@ -449,39 +790,41 @@ void WordleSolver::updateMaxLetters(const std::string& guess, const std::vector<
  * @return A vector of Feedback enums representing the feedback pattern.
  */
 std::vector<Feedback> WordleSolver::feedbackPattern(const std::string& guess, const std::string& solution) const {
-  // No neutral element so I choose Absent as it might cause less issues, if there are mistakes down the code
-  std::vector<Feedback> feedback = {Feedback::Absent, Feedback::Absent, Feedback::Absent ,Feedback::Absent , Feedback::Absent};
-  std::vector<char> solutionChar = {solution[0], solution[1], solution[2], solution[3], solution[4]};
+  const size_t wordLength = solution.length();
 
-  if (guess.size() != 5 || solution.size() != 5) {
-    throw NotAFiveLetterWordException(guess);
+  if (guess.size() != wordLength) {
+    throw WordLengthMismatchException(guess);
   }
 
-  // Check for correctly placed chars and remove those from the solution String
-  for (int i = 0; i < 5; i++) {
-    if (std::tolower(solution[i]) == std::tolower(guess[i]) ) {
+
+  std::vector<Feedback> feedback(wordLength, Feedback::Absent);
+
+  std::vector<char> solutionChar(solution.begin(), solution.end());
+
+
+  for (size_t i = 0; i < wordLength; ++i) {
+    if (std::tolower(guess[i]) == std::tolower(solutionChar[i])) {
       feedback[i] = Feedback::Correct;
-      // Needs to replace letter so that it can't get flag it as "Present" later on
       solutionChar[i] = '_';
     }
   }
 
-  // Check how many misspositioned letters there are
-  for (int i = 0; i < 5; i++) {
-    for (int j = 0; j < 5; j++) {
-      if (feedback[i] == Feedback::Correct) {
-        break;
-      }
+  // Pass 2: Check for misplaced letters (Yellow)
+  for (size_t i = 0; i < wordLength; ++i) {
+    // Skip if already marked Correct
+    if (feedback[i] == Feedback::Correct) {
+      continue;
+    }
+
+    for (size_t j = 0; j < wordLength; ++j) {
       if (std::tolower(guess[i]) == std::tolower(solutionChar[j])) {
         feedback[i] = Feedback::Present;
-        // remove this char (_) so that
-        // Solution: "steal" -> Guess: "speed" -> will only set give one "1" for your e instead of "1" for each e
+        // Mark this specific letter in solution as used
         solutionChar[j] = '_';
         break;
       }
     }
   }
-
 
   return feedback;
 }
@@ -510,23 +853,7 @@ void WordleSolver::printGuessingInfo() const {
   std::cout << "[INFO] " << possibleWords.size() << " possible solutions remaining." << std::endl;
 }
 
-/**
- * @brief Prints the entropy results for the remaining possible words.
- * @param entropyResults A vector of pairs containing words and their corresponding entropy values.
- */
-void WordleSolver::printEntropyResults(const std::vector<std::pair<std::string, double>>& entropyResults) {
-  std::cout << "[INFO] Entropy results for remaining possible words (sorted):" << std::endl;
-  for (const auto& [word, entropy] : entropyResults) {
-    std::ostringstream oss;
-    oss << "  Entropy for \"" << word << "\": ";
-    if (entropy < 0.01 && entropy > 0.0) {
-      oss << std::scientific << entropy << " bits";
-    } else {
-      oss << std::fixed << entropy << " bits";
-    }
-    std::cout << oss.str() << std::endl;
-  }
-}
+
 
 /**
  * @brief Prints the best guess word based on maximum entropy.
@@ -543,3 +870,54 @@ void WordleSolver::printBestGuess(const std::string& guess) {
 void WordleSolver::printErrorNoMaximumEntropy() {
     std::cerr << "[ERROR] Could not find a guess word with maximum entropy!" << std::endl;
 }
+
+
+/**
+ * @brief Selects a random secret word from a word list.
+ * @param wordList The list of possible words.
+ * @return A randomly chosen word.
+ * @throws std::invalid_argument if the word list is empty.
+ */
+std::string WordleSolver::chooseRandomSecret(const std::vector<std::string>& wordList) {
+  if (wordList.empty()) {
+    throw WordListEmptyException();
+  }
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis(0, wordList.size() - 1);
+  return wordList[dis(gen)];
+}
+
+
+/**
+ * @brief Reads a word list from a file.
+ * @param filename The path to the word list file.
+ * @return A vector of words.
+ */
+std::vector<std::string> WordleSolver::readWordList(const std::string& filename) {
+  std::vector<std::string> words;
+  std::ifstream file(filename);
+  std::string word;
+  while (file >> word) {
+    std::transform(word.begin(), word.end(), word.begin(), ::tolower);
+    words.push_back(word);
+  }
+  return words;
+}
+
+
+/**
+ * @brief Returns the number of tries used so far.
+ * Useless in this implementation: If Main was not constructed by my teammates then this will naturally just give 0 tries when accessed by the solver
+ */
+int WordleSolver::getTries() const { return tries; }
+
+/**
+ * @brief Returns the maximum number of allowed tries.
+ */
+int WordleSolver::getMaxTries() const { return maxTries; }
+
+/**
+ * @brief Returns the length of the secret word.
+ */
+int WordleSolver::getWordLength() const { return static_cast<int>(secret.size()); }

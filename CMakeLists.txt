@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Source files
 set(SOURCE_FILES
-        src/WordleGame.cpp
         src/WordleSolver.cpp
         src/FeedbackStrategy.cpp
 )

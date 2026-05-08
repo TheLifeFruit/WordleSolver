@@ -6,10 +6,10 @@
 #define WORDLEEXCEPTIONS_H
 #include <stdexcept>
 
-class NotAFiveLetterWordException : public std::runtime_error {
+class WordLengthMismatchException : public std::runtime_error {
   public:
-    explicit NotAFiveLetterWordException(const std::string& word)
-        : std::runtime_error("[ERROR] The entered word '" + word + "' is not a five-letter word.") {}
+    explicit WordLengthMismatchException(const std::string& word)
+        : std::runtime_error("[ERROR] The entered word '" + word + "' is not a the same letter word.") {}
 };
 
 class GuessLimitReachedException : public std::runtime_error {
