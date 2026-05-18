@@ -9,10 +9,11 @@
 #include <algorithm>
 #include <random>
 #include <memory>
+#include <filesystem>
 
 int mode = 0;
 bool reset = true;
-
+std::filesystem::path currentWorkingDir;
 
 
 static std::string feedbackToString(const std::vector<Feedback>& feedback) {
@@ -174,7 +175,7 @@ void play_mode_0() {
   for (int g=0; g < runs; g++) {
     try {
 
-      std::unique_ptr<WordleSolver> solver = std::make_unique<WordleSolver>("C:/Code GIT/praktikuminfauto25wordlepart2-gruppe105/data/en" + l + ".csv");
+      std::unique_ptr<WordleSolver> solver = std::make_unique<WordleSolver>(currentWorkingDir.generic_string() + "/data/en" + l + ".csv");
       int maxTries = solver->getMaxTries();
       std::string secret = solver->getSecret();
 
@@ -263,7 +264,7 @@ void play_mode_1 (){
 
 
 
-  const auto solver = std::make_unique<WordleSolver>("C:/Code GIT/praktikuminfauto25wordlepart2-gruppe105/data/" + dict + ".csv");
+  const auto solver = std::make_unique<WordleSolver>(currentWorkingDir.generic_string() +"/data/" + dict + ".csv");
   std::string secret = solver->getSecret();
   int lenght = solver->getWordLength();
 
@@ -408,7 +409,16 @@ void play(int mode) {
 
 
 
-int main() {
+int main(int argc, char* argv[]) {
+  if (argc > 0) {
+    currentWorkingDir = std::filesystem::absolute(argv[0]);
+    currentWorkingDir = currentWorkingDir.parent_path().parent_path();
+  } else {
+    std::cout << "[ERROR] Couldnt find SYS Path!" << '\n';
+    return 0;
+  }
+
+
   int mode = 0;
   std::cout << "[INFO] Welcome to the Wordle Solver!" << '\n';
   std::cout << "[INFO] /help if youre stuck" << '\n';
